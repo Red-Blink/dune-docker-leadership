@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "leadership-board-demo",
+  "name": "Leadership Board Demo",
+  "description": "Demo addon showing a ranked player overview with level, faction, guild, status, and last-seen details.",
+  "author": "Red-Blink",
+  "version": "1.0.0",
+  "type": "ui",
+  "entry": {
+    "navigation": "Leadership Board",
+    "path": "web/index.html"
+  },
+  "permissions": [
+    "players:read"
+  ]
+}
