@@ -8,5 +8,11 @@ const root=path.resolve(__dirname,'..');
 test('package is reproducible and its downloaded checksum uses the archive basename',()=>{
   const build=()=>{const result=spawnSync('bash',[path.join(root,'scripts/package.sh')],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);return fs.readFileSync(path.join(root,'dist/leadership-board.zip'));};
   const first=build(),second=build();assert.deepEqual(first,second);
+  const entry=spawnSync('python3',['-c',"import zipfile; print(zipfile.ZipFile('dist/leadership-board.zip').read('web/index.html').decode())"],{cwd:root,encoding:'utf8'});
+  assert.equal(entry.status,0,entry.stderr);
+  assert.doesNotMatch(entry.stdout,/<(?:script[^>]*src=|link[^>]*rel=["']stylesheet)/i);
+  assert.match(entry.stdout,/<style>[\s\S]*\.shell/);
+  assert.match(entry.stdout,/window\.DuneAddon =/);
+  assert.match(entry.stdout,/searchInput/);
   const digest=createHash('sha256').update(first).digest('hex');assert.equal(fs.readFileSync(path.join(root,'dist/leadership-board.zip.sha256'),'utf8'),`${digest}  leadership-board.zip\n`);
 });
