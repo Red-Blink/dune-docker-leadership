@@ -19,16 +19,17 @@ Create a release archive:
 ./scripts/package.sh
 ```
 
-The archive is written to:
+Packaging requires Node.js and Python 3. The archive and checksum are written to:
 
 ```text
 dist/leadership-board.zip
+dist/leadership-board.zip.sha256
 ```
 
-Generate the checksum for the community addons index:
+Verify downloaded release files from the directory containing them:
 
 ```bash
-sha256sum dist/leadership-board.zip
+sha256sum -c leadership-board.zip.sha256
 ```
 
 ## Community Listing
@@ -57,16 +58,40 @@ The response should include:
 
 ```json
 {
+  "capabilities": { "players": true, "leadership": true },
   "rows": [
     {
-      "characterName": "Player",
+      "name": "Player",
       "level": 50,
       "faction": "Atreides",
       "guild": "Guild Name",
-      "onlineStatus": "Online",
+      "status": "Online",
       "map": "Survival_1",
       "lastSeen": "2026-06-15T12:00:00Z"
     }
   ]
 }
 ```
+
+The addon uses the Console's permissioned iframe bridge. It does not need an
+API key or direct REST access. Legacy player-name and status aliases remain
+readable. When player data is unavailable, the addon shows an error instead of
+reporting an empty server.
+
+`leadership.players.list` remains supported by the current Console and preserves
+compatibility with earlier installations. The newer `players.summary.list`
+action returns the same player-summary shape.
+
+## Development and Tests
+
+```bash
+node scripts/validate.js
+node --test test/*.test.js
+bash -n scripts/package.sh
+```
+
+Open the addon inside the Console to use real data. Standalone layout previews
+need a mocked `window.DuneAddon.request`; they do not call a separate REST
+endpoint. `browser-tests/leadership.mjs` checks the real sandbox bridge, ranking,
+online counts, search and mobile layouts using synthetic data. Set
+`PLAYWRIGHT_MODULE` and `CHROMIUM_PATH` for your installed browser.

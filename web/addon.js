@@ -1,4 +1,3 @@
-const ADDON_REQUEST_TIMEOUT_MS = 8000;
 const state = {
   rows: [],
   filteredRows: [],
@@ -15,60 +14,13 @@ const elements = {
   highestLevel: document.getElementById("highestLevel")
 };
 
-function addonRequest(action, payload = {}) {
-  if (window.parent && window.parent !== window) {
-    return bridgeRequest(action, payload);
-  }
-  return fetchRequest(action, payload);
-}
-
-function bridgeRequest(action, payload) {
-  return new Promise((resolve, reject) => {
-    const requestId = `leadership-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const timer = window.setTimeout(() => {
-      window.removeEventListener("message", onMessage);
-      reject(new Error("Dune Console addon bridge did not respond."));
-    }, ADDON_REQUEST_TIMEOUT_MS);
-
-    function onMessage(event) {
-      const message = event.data || {};
-      if (message.type !== "dune-addon-response" || message.requestId !== requestId) return;
-      window.clearTimeout(timer);
-      window.removeEventListener("message", onMessage);
-      if (message.ok === false) reject(new Error(message.error || "Addon request failed."));
-      else resolve(message.result || {});
-    }
-
-    window.addEventListener("message", onMessage);
-    window.parent.postMessage({
-      type: "dune-addon-request",
-      requestId,
-      addonId: "leadership-board-demo",
-      permission: "players:read",
-      action,
-      payload
-    }, "*");
-  });
-}
-
-async function fetchRequest(action, payload) {
-  if (action !== "leadership.players.list") throw new Error(`Unsupported action: ${action}`);
-  const query = payload && payload.q ? `?q=${encodeURIComponent(payload.q)}` : "";
-  const response = await fetch(`/api/addons/leadership/players${query}`, {
-    headers: { "Accept": "application/json" }
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.error || `Request failed with HTTP ${response.status}`);
-  return body;
-}
-
 function normalizeRows(rows) {
-  return (Array.isArray(rows) ? rows : []).map((row) => ({
-    characterName: stringValue(row.characterName ?? row.character_name ?? row.name, "Unknown"),
+  return (Array.isArray(rows) ? rows : []).filter(row => row && typeof row === 'object').map((row) => ({
+    characterName: stringValue(row.name ?? row.characterName ?? row.character_name, "Unknown"),
     level: numberValue(row.level),
     faction: stringValue(row.faction ?? row.factionName ?? row.faction_name, "Unavailable"),
     guild: stringValue(row.guild ?? row.guildName ?? row.guild_name, "Unavailable"),
-    onlineStatus: stringValue(row.onlineStatus ?? row.online_status, "Offline"),
+    onlineStatus: stringValue(row.status ?? row.onlineStatus ?? row.online_status, "Unavailable"),
     map: stringValue(row.map, "Unavailable"),
     lastSeen: stringValue(row.lastSeen ?? row.last_seen, "")
   }));
@@ -111,7 +63,9 @@ async function loadRows() {
   setLoading(true);
   setStatus("Loading leadership data...", "");
   try {
-    const result = await addonRequest("leadership.players.list", {});
+    const result = await window.DuneAddon.request("leadership.players.list", {});
+    if (result?.capabilities?.players === false) throw new Error('Player data is unavailable on this server.');
+    if (!Array.isArray(result?.rows)) throw new Error('The Console returned an invalid player summary.');
     state.rows = normalizeRows(result.rows);
     applyFilter();
     setStatus(state.rows.length ? `Loaded ${state.rows.length} player${state.rows.length === 1 ? "" : "s"}.` : "No players found.", "success");
@@ -155,7 +109,7 @@ function renderRow(row, index) {
   const statusCell = document.createElement("td");
   const pill = document.createElement("span");
   pill.className = `status-pill ${statusOnline(row.onlineStatus) ? "online" : ""}`.trim();
-  pill.textContent = statusOnline(row.onlineStatus) ? "Online" : "Offline";
+  pill.textContent = statusOnline(row.onlineStatus) ? "Online" : row.onlineStatus.toLowerCase() === 'offline' ? "Offline" : "Unavailable";
   statusCell.appendChild(pill);
   tr.appendChild(statusCell);
   appendCell(tr, row.map);

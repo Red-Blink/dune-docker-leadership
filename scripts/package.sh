@@ -1,35 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-dist_dir="$repo_root/dist"
-archive="$dist_dir/leadership-board.zip"
-
-mkdir -p "$dist_dir"
-rm -f "$archive"
-
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$repo_root"
-if command -v zip >/dev/null 2>&1; then
-  zip -qr "$archive" addon.json web README.md
-else
-  python3 - "$archive" <<'PY'
-import pathlib
-import sys
+node scripts/validate.js
+
+python3 - <<'PY'
+import hashlib
+from pathlib import Path
 import zipfile
 
-archive = pathlib.Path(sys.argv[1])
-root = pathlib.Path.cwd()
-paths = [root / "addon.json", root / "README.md", root / "web"]
-with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+root = Path.cwd()
+dist = root / 'dist'
+dist.mkdir(exist_ok=True)
+archive = dist / 'leadership-board.zip'
+paths = [root / 'addon.json', root / 'README.md', *sorted((root / 'web').rglob('*'))]
+with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as package:
     for path in paths:
-        if path.is_dir():
-            for child in sorted(path.rglob("*")):
-                if child.is_file():
-                    zf.write(child, child.relative_to(root).as_posix())
-        else:
-            zf.write(path, path.relative_to(root).as_posix())
+        if path.is_symlink():
+            raise ValueError('Runtime package must not contain symlinks')
+        if not path.is_file():
+            continue
+        info = zipfile.ZipInfo(path.relative_to(root).as_posix(), (1980, 1, 1, 0, 0, 0))
+        info.create_system = 3
+        info.external_attr = 0o100644 << 16
+        info.compress_type = zipfile.ZIP_DEFLATED
+        package.writestr(info, path.read_bytes(), compresslevel=9)
+digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+(dist / 'leadership-board.zip.sha256').write_text(f'{digest}  leadership-board.zip\n')
+print(f'Created {archive}')
+print(f'{digest}  leadership-board.zip')
 PY
-fi
-
-echo "Created $archive"
-sha256sum "$archive"
